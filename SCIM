@@ -1,0 +1,34 @@
+--Create Role, Grants, Run_As_Role (naming conventions are at the customer discretion)
+use role accountadmin;
+create role if not exists aad_provisioner1;
+grant create user on account to role aad_provisioner1;
+grant create role on account to role aad_provisioner1;
+grant role aad_provisioner1 to role accountadmin;
+create or replace security integration aad_provisioning1
+    type = scim
+    scim_client = 'azure' --Azure AD or Okta 
+    run_as_role = 'AAD_PROVISIONER1';
+
+--SCIM Token
+select system$generate_scim_access_token('AAD_PROVISIONING1');
+
+--Example ownership transfer to current Snowflake user to the SCIM Provisioner role (prevents 409 Conflict errors)
+use role accountadmin;
+grant ownership on user "MIKE_M" to role <scim provisioner>;
+
+--SCIM Network Policy 
+alter security integration aad_provisioning set network_policy = <scim_network_policy>;
+
+--SCIM Audit
+use role accountadmin;
+use database snowflake;
+use schema information_schema;
+select * from table(rest_event_history('scim'));
+
+select *
+    from table(rest_event_history(
+        'scim',
+        dateadd('minutes',-60,current_timestamp()),
+        current_timestamp(),
+        200))
+    order by event_timestamp;
